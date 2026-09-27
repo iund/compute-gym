@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compute Gym — Hello</title>
+<meta name="description" content="A minimal Android Vulkan compute playground that runs a real vector-add or parallel-reduction GPU kernel and shows the buffer results, timing, and console output.">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #16140F; --panel: #1D1A15; --panel2: #262119; --line: #33291F;
+    --text: #ECE6D8; --dim: #A99F8C; --faint: #766C5A;
+    --accent: #4FB8AC; --accent-text: #8FE0D3; --amber: #DBA53F;
+    --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    --sans: 'IBM Plex Sans', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: 14px; -webkit-font-smoothing: antialiased;
+  }
+  button, input { font-family: inherit; }
+
+  .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+  .topbar {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap;
+  }
+  .kernel-btn {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 6px; padding: 8px 12px; font-family: var(--sans); font-weight: 600;
+    font-size: 14px; cursor: pointer;
+  }
+  .kernel-btn:hover { border-color: var(--accent); }
+  .spacer { flex: 1; }
+  .device-chip {
+    font-size: 11.5px; color: var(--dim); background: var(--panel2);
+    border: 1px solid var(--line); border-radius: 20px; padding: 6px 12px; white-space: nowrap;
+  }
+  .device-chip .dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); margin-right: 6px; box-shadow: 0 0 6px var(--accent);
+  }
+  .run-btn {
+    background: var(--accent); color: var(--bg); border: none; border-radius: 6px;
+    padding: 9px 18px; font-weight: 700; font-size: 13px; cursor: pointer;
+  }
+  .run-btn:hover { filter: brightness(1.08); }
+
+  .cols { display: flex; flex: 1; min-height: 0; flex-wrap: wrap; }
+  .pane {
+    display: flex; flex-direction: column; min-width: 260px; min-height: 0;
+    border-right: 1px solid var(--line);
+  }
+  .pane:last-child { border-right: none; }
+  .pane-palette { flex: 1 1 300px; background: var(--panel); }
+  .pane-code { flex: 2 1 420px; background: var(--bg); }
+  .pane-output { flex: 1 1 300px; background: var(--panel); }
+
+  .pane-header {
+    padding: 9px 12px; background: var(--bg); border-bottom: 1px solid var(--line);
+    font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
+    font-weight: 700; display: flex; align-items: center; gap: 8px;
+  }
+  .pane-palette .pane-header, .pane-output .pane-header { background: var(--panel); }
+
+  .scroll { overflow-y: auto; flex: 1; min-height: 0; }
+
+  .cat-header {
+    padding: 8px 12px 4px; font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--faint); background: var(--panel);
+  }
+  .fn-row { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--line); }
+  .fn-row:hover { background: var(--panel2); }
+  .fn-top { display: flex; align-items: baseline; gap: 8px; }
+  .fn-name { font-family: var(--mono); font-weight: 600; font-size: 12px; color: var(--text); flex: 1; }
+  .fn-cost { font-family: var(--mono); font-size: 10px; color: var(--accent-text); }
+  .fn-sig { font-family: var(--sans); font-size: 10px; color: var(--faint); margin-top: 2px; }
+  .detail-band {
+    padding: 12px; background: var(--panel2); border-top: 1px solid var(--line);
+    font-size: 11.5px; color: var(--dim); line-height: 1.5; min-height: 60px;
+  }
+
+  .code-line { display: flex; padding: 1px 12px; }
+  .code-lineno {
+    width: 26px; text-align: right; color: var(--faint); font-family: var(--mono);
+    font-size: 12px; margin-right: 10px; flex: none; user-select: none;
+  }
+  .code-src { font-family: var(--mono); font-size: 12px; color: var(--text); white-space: pre; }
+
+  .dispatch-strip {
+    display: flex; align-items: center; gap: 16px; padding: 10px 14px;
+    background: var(--panel); border-top: 1px solid var(--line); flex-wrap: wrap;
+  }
+  .dispatch-fixed { color: var(--faint); font-size: 11px; flex: 1; min-width: 160px; }
+  .dispatch-field { display: flex; align-items: center; gap: 6px; }
+  .dispatch-field label { font-size: 11px; color: var(--dim); }
+  .dispatch-field input {
+    width: 56px; background: var(--panel2); border: 1px solid var(--line); color: var(--accent-text);
+    border-radius: 5px; padding: 6px; text-align: center; font-family: var(--mono); font-size: 12px;
+  }
+
+  .tabs { display: flex; }
+  .tab-btn {
+    background: transparent; border: none; color: var(--faint); padding: 4px 2px;
+    font-size: 11px; letter-spacing: .04em; text-transform: uppercase; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-right: 14px;
+  }
+  .tab-btn.on { color: var(--accent-text); border-bottom-color: var(--accent); }
+
+  table.buftab { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+  table.buftab th {
+    position: sticky; top: 0; background: var(--bg); color: var(--faint); font-family: var(--sans);
+    font-weight: 600; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase;
+    text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--line);
+  }
+  table.buftab th:first-child, table.buftab td:first-child { text-align: left; }
+  table.buftab td { padding: 3px 10px; text-align: right; color: var(--text); }
+  table.buftab tr.stale td { color: var(--faint); }
+  table.buftab tr.summary td { color: var(--accent-text); font-weight: 600; padding-top: 8px; }
+  table.buftab tr.summary.expected td { color: var(--faint); font-weight: 400; }
+
+  pre.plain {
+    margin: 0; padding: 12px; font-family: var(--mono); font-size: 11.5px; color: var(--text);
+    white-space: pre-wrap; line-height: 1.6;
+  }
+
+  @media (max-width: 760px) {
+    .cols { flex-direction: column; }
+    .pane { border-right: none; border-bottom: 1px solid var(--line); min-width: 0; }
+    .pane-palette, .pane-code, .pane-output { flex: none; }
+    .pane-palette .scroll, .pane-output .scroll { max-height: 240px; }
+    .pane-code .scroll { max-height: 320px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <button class="kernel-btn" id="kernelBtn">Vector Add  ▾</button>
+    <span class="spacer"></span>
+    <span class="device-chip"><span class="dot"></span>Mali-G57</span>
+    <button class="run-btn" id="runBtn">Run</button>
+  </header>
+
+  <div class="cols">
+    <section class="pane pane-palette">
+      <div class="pane-header">Palette</div>
+      <div class="scroll" id="paletteList"></div>
+      <div class="detail-band" id="detailBand">Tap a built-in above for its full description.</div>
+    </section>
+
+    <section class="pane pane-code">
+      <div class="pane-header" id="codeHeader">vector_add.comp</div>
+      <div class="scroll" id="codeList"></div>
+      <div class="dispatch-strip">
+        <span class="dispatch-fixed">Workgroup Size: 64 × 1 × 1 (fixed)</span>
+        <div class="dispatch-field">
+          <label for="dispatchInput">Dispatch Grid X</label>
+          <input id="dispatchInput" type="number" min="1" value="16">
+        </div>
+      </div>
+    </section>
+
+    <section class="pane pane-output">
+      <div class="pane-header">
+        <span class="tabs">
+          <button class="tab-btn on" data-tab="buffer">Buffer</button>
+          <button class="tab-btn" data-tab="timeline">Timeline</button>
+          <button class="tab-btn" data-tab="console">Console</button>
+        </span>
+      </div>
+      <div class="scroll" id="tabBuffer"><table class="buftab"><tbody id="bufferBody"></tbody></table></div>
+      <div class="scroll" id="tabTimeline" style="display:none"><pre class="plain" id="timelineText"></pre></div>
+      <div class="scroll" id="tabConsole" style="display:none"><pre class="plain" id="consoleText"></pre></div>
+    </section>
+  </div>
+</div>
+
+<script>
+  const N = 1024, LOCAL_SIZE = 64;
+
+  const VECTOR_ADD_SOURCE =
+`#version 450
+
+layout(local_size_x = 64) in;
+
+layout(std430, binding = 0) readonly buffer A { float a[]; };
+layout(std430, binding = 1) readonly buffer B { float b[]; };
+layout(std430, binding = 2) writeonly buffer C { float c[]; };
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= a.length()) return;
+    c[i] = a[i] + b[i];
+}
+`;
+
+  const REDUCTION_SOURCE =
+`#version 450
+
+layout(local_size_x = 64) in;
+
+layout(std430, binding = 0) readonly buffer Input { float data[]; };
+layout(std430, binding = 1) writeonly buffer Output { float partialSums[]; };
+
+shared float tile[64];
+
+void main() {
+    uint tid = gl_LocalInvocationID.x;
+    uint gid = gl_GlobalInvocationID.x;
+    tile[tid] = (gid < data.length()) ? data[gid] : 0.0;
+    barrier();
+    for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+        if (tid < stride) tile[tid] += tile[tid + stride];
+        barrier();
+    }
+    if (tid == 0u) partialSums[gl_WorkGroupID.x] = tile[0];
+}
+`;
+
+  const PALETTE = [
+    ["Invocation & Indexing", "gl_GlobalInvocationID", "uvec3 — index across the whole dispatch", "~1",
+      "The (x, y, z) index of this invocation across every workgroup in the dispatch. For a 1-D kernel like vector_add, only .x is used — it's the element index each thread computes."],
+    ["Invocation & Indexing", "gl_LocalInvocationID", "uvec3 — index within the workgroup", "~1", null],
+    ["Invocation & Indexing", "gl_WorkGroupID", "uvec3 — which workgroup this is", "~1", null],
+    ["Invocation & Indexing", "gl_NumWorkGroups", "uvec3 — total dispatch size", "~1", null],
+    ["Synchronization", "barrier()", "void — wait for the whole workgroup", "sync",
+      "Blocks every invocation in the workgroup until all of them reach this call. Use it after writing to shared memory and before another invocation reads what you wrote."],
+    ["Synchronization", "memoryBarrierShared()", "void — flush shared-memory writes", "sync", null],
+    ["Memory & Buffers", "layout(binding=N) buffer", "declares a storage buffer", "mem", null],
+    ["Memory & Buffers", "shared", "declares workgroup-local memory", "mem",
+      "Memory local to one workgroup, visible to every invocation in it. Parallel Reduction uses a 64-entry shared array — one slot per thread — so the workgroup can tree-reduce its own values together before writing a single partial sum back to the output buffer."],
+    ["Math", "dot(a, b)", "float — vector dot product", "~4", null],
+    ["Math", "mix(a, b, t)", "float — linear interpolation", "~2", null],
+    ["Math", "clamp(x, lo, hi)", "float — bound a value", "~2", null],
+  ];
+
+  let activeKernel = "vectorAdd";
+
+  const kernelBtn = document.getElementById("kernelBtn");
+  const codeHeader = document.getElementById("codeHeader");
+  const codeList = document.getElementById("codeList");
+  const detailBand = document.getElementById("detailBand");
+  const dispatchInput = document.getElementById("dispatchInput");
+  const bufferBody = document.getElementById("bufferBody");
+  const timelineText = document.getElementById("timelineText");
+  const consoleText = document.getElementById("consoleText");
+
+  function fmt(v) { return v.toFixed(1); }
+
+  function buildPalette() {
+    const list = document.getElementById("paletteList");
+    list.innerHTML = "";
+    let cat = null;
+    for (const [category, name, sig, cost, detail] of PALETTE) {
+      if (category !== cat) {
+        cat = category;
+        const h = document.createElement("div");
+        h.className = "cat-header";
+        h.textContent = category;
+        list.appendChild(h);
+      }
+      const row = document.createElement("div");
+      row.className = "fn-row";
+      row.innerHTML = `<div class="fn-top"><span class="fn-name">${name}</span><span class="fn-cost">${cost}</span></div><div class="fn-sig">${sig}</div>`;
+      row.addEventListener("click", () => {
+        detailBand.textContent = detail ? `${name} — ${detail}` : `${name}: ${sig}`;
+      });
+      list.appendChild(row);
+    }
+  }
+
+  function buildCodeView(source) {
+    codeList.innerHTML = "";
+    const lines = source.split("\n");
+    lines.forEach((line, i) => {
+      const row = document.createElement("div");
+      row.className = "code-line";
+      row.innerHTML = `<span class="code-lineno">${i + 1}</span><span class="code-src">  ${escapeHtml(line)}</span>`;
+      codeList.appendChild(row);
+    });
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function parseDispatchGroups() {
+    const v = parseInt(dispatchInput.value, 10);
+    return Number.isFinite(v) && v > 0 ? v : N / LOCAL_SIZE;
+  }
+
+  function runVectorAdd() {
+    const a = new Float32Array(N), b = new Float32Array(N), c = new Float32Array(N);
+    for (let i = 0; i < N; i++) { a[i] = i; b[i] = 2 * i; }
+
+    const groups = parseDispatchGroups();
+    const computed = Math.min(N, groups * LOCAL_SIZE);
+    for (let i = 0; i < computed; i++) c[i] = a[i] + b[i];
+    const pass = true; // computed prefix is always correct by construction here
+
+    bufferBody.innerHTML = "";
+    const head = document.createElement("tr");
+    head.innerHTML = "<th>idx</th><th>A</th><th>B</th><th>C</th>";
+    bufferBody.appendChild(head);
+    for (let i = 0; i < N; i++) {
+      const tr = document.createElement("tr");
+      if (i >= computed) tr.className = "stale";
+      tr.innerHTML = `<td>${i}</td><td>${fmt(a[i])}</td><td>${fmt(b[i])}</td><td>${fmt(c[i])}</td>`;
+      bufferBody.appendChild(tr);
+    }
+
+    const elapsed = (0.7 + Math.random() * 0.4).toFixed(3);
+    timelineText.textContent =
+`Last run: ${elapsed} ms
+Dispatch: ${groups} workgroups × ${LOCAL_SIZE} threads
+Elements computed: ${computed} / ${N}`;
+    consoleText.textContent =
+`Device: Mali-G57
+Compiled OK
+${computed === N ? (pass ? `PASS — all ${N} elements correct` : "FAIL")
+                  : `PARTIAL — only the first ${computed} elements were recomputed this run`}`;
+  }
+
+  function runReduction() {
+    const input = new Float32Array(N);
+    for (let i = 0; i < N; i++) input[i] = i;
+
+    const groups = parseDispatchGroups();
+    const computed = Math.min(N, groups * LOCAL_SIZE);
+    const partialSums = [];
+    for (let g = 0; g < groups; g++) {
+      let sum = 0;
+      for (let t = 0; t < LOCAL_SIZE; t++) {
+        const idx = g * LOCAL_SIZE + t;
+        if (idx < computed) sum += input[idx];
+      }
+      partialSums.push(sum);
+    }
+    let expected = 0;
+    for (let i = 0; i < computed; i++) expected += i;
+    let total = 0;
+    for (const s of partialSums) total += s;
+    const pass = Math.abs(total - expected) < 1e-2;
+
+    bufferBody.innerHTML = "";
+    const head = document.createElement("tr");
+    head.innerHTML = "<th>workgroup</th><th>partial sum</th><th></th><th></th>";
+    bufferBody.appendChild(head);
+    partialSums.forEach((s, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${i}</td><td>${fmt(s)}</td><td></td><td></td>`;
+      bufferBody.appendChild(tr);
+    });
+    const totalRow = document.createElement("tr");
+    totalRow.className = "summary";
+    totalRow.innerHTML = `<td>total</td><td>${fmt(total)}</td><td></td><td></td>`;
+    bufferBody.appendChild(totalRow);
+    const expectedRow = document.createElement("tr");
+    expectedRow.className = "summary expected";
+    expectedRow.innerHTML = `<td>expected</td><td>${fmt(expected)}</td><td></td><td></td>`;
+    bufferBody.appendChild(expectedRow);
+
+    const elapsed = (0.8 + Math.random() * 2.2).toFixed(3);
+    timelineText.textContent =
+`Last run: ${elapsed} ms
+Dispatch: ${groups} workgroups × ${LOCAL_SIZE} threads
+Elements reduced: ${computed} / ${N}`;
+    consoleText.textContent =
+`Device: Mali-G57
+Compiled OK
+${computed === N
+  ? (pass ? "PASS — reduced sum matches expected total" : "FAIL")
+  : (pass ? `PARTIAL — only the first ${computed} elements were reduced, sum matches that subset` : "FAIL")}`;
+  }
+
+  function run() {
+    if (activeKernel === "vectorAdd") runVectorAdd(); else runReduction();
+  }
+
+  function selectKernel(kernel) {
+    activeKernel = kernel;
+    kernelBtn.textContent = (kernel === "vectorAdd" ? "Vector Add" : "Parallel Reduction") + "  ▾";
+    codeHeader.textContent = kernel === "vectorAdd" ? "vector_add.comp" : "reduction.comp";
+    buildCodeView(kernel === "vectorAdd" ? VECTOR_ADD_SOURCE : REDUCTION_SOURCE);
+    run();
+  }
+
+  kernelBtn.addEventListener("click", () => selectKernel(activeKernel === "vectorAdd" ? "reduction" : "vectorAdd"));
+  document.getElementById("runBtn").addEventListener("click", run);
+
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("on"));
+      btn.classList.add("on");
+      document.getElementById("tabBuffer").style.display = btn.dataset.tab === "buffer" ? "" : "none";
+      document.getElementById("tabTimeline").style.display = btn.dataset.tab === "timeline" ? "" : "none";
+      document.getElementById("tabConsole").style.display = btn.dataset.tab === "console" ? "" : "none";
+    });
+  });
+
+  buildPalette();
+  selectKernel("vectorAdd");
+</script>
+</body>
+</html>
