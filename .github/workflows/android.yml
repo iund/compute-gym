@@ -1,0 +1,58 @@
+name: Android
+
+# Builds the Android app (the only real platform target in this repo — see
+# note at the bottom). The macOS artboard under the design canvas was a UI
+# mockup only; no native macOS app was ever implemented, so there is nothing
+# to build for it here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build APK + unit tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK and platform packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platforms;android-36" "build-tools;37.0.0" "ndk;25.2.9519653"
+
+      - name: Write local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Host-JVM unit tests (KernelMath)
+        run: ./gradlew :app:testDebugUnitTest
+
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compute-gym-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      # Instrumented tests (VulkanBridgeInstrumentedTest) are intentionally NOT
+      # run here: they dispatch real Vulkan compute work and only mean anything
+      # against the actual Mali-G57 on a physical Tabwee T50. A hosted CI
+      # runner/emulator has no such GPU, and an emulator's software Vulkan
+      # path would validate a different thing than what this app targets.
+      # Run them locally against the device instead:
+      #   ./gradlew :app:connectedDebugAndroidTest
