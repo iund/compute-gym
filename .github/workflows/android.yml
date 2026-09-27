@@ -24,13 +24,13 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
+      # macos-latest runners ship with an Android SDK + cmdline-tools preinstalled
+      # (at $ANDROID_HOME) — no setup-android action needed, just top it up.
       - name: Install NDK and platform packages
         run: |
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager "platforms;android-36" "build-tools;37.0.0" "ndk;25.2.9519653"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | sort -V | tail -1)"
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" "platforms;android-36" "build-tools;37.0.0" "ndk;25.2.9519653"
 
       - name: Write local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > local.properties
