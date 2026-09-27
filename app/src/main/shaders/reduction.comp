@@ -1,0 +1,23 @@
+#version 450
+
+layout(local_size_x = 64) in;
+
+layout(std430, binding = 0) readonly buffer Input { float data[]; };
+layout(std430, binding = 1) writeonly buffer Output { float partialSums[]; };
+
+shared float tile[64];
+
+void main() {
+    uint tid = gl_LocalInvocationID.x;
+    uint gid = gl_GlobalInvocationID.x;
+
+    tile[tid] = (gid < data.length()) ? data[gid] : 0.0;
+    barrier();
+
+    for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+        if (tid < stride) tile[tid] += tile[tid + stride];
+        barrier();
+    }
+
+    if (tid == 0u) partialSums[gl_WorkGroupID.x] = tile[0];
+}

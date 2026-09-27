@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#16140F</color>
+    <color name="panel">#1D1A15</color>
+    <color name="panel2">#262119</color>
+    <color name="line">#33291F</color>
+    <color name="text">#ECE6D8</color>
+    <color name="dim">#A99F8C</color>
+    <color name="faint">#766C5A</color>
+    <color name="accent">#4FB8AC</color>
+    <color name="accent_text">#8FE0D3</color>
+    <color name="amber">#DBA53F</color>
+</resources>
