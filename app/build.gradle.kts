@@ -37,6 +37,10 @@ android {
         }
         release {
             isMinifyEnabled = false
+            // Signed with the auto-generated debug key: this app is sideloaded onto
+            // one specific device, not distributed via a store, so a dedicated
+            // release keystore (and the CI secrets to hold it) would be pure overhead.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

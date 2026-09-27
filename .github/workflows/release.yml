@@ -1,0 +1,54 @@
+name: Release
+
+# Builds a release APK and publishes it as a GitHub Release whenever a
+# vX.Y.Z tag is pushed. See android.yml for the on-every-push build/test job.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build release APK and publish GitHub Release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # macos-latest runners ship with an Android SDK + cmdline-tools preinstalled.
+      - name: Install NDK and platform packages
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | sort -V | tail -1)"
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" "platforms;android-36" "build-tools;37.0.0" "ndk;25.2.9519653"
+
+      - name: Write local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Host-JVM unit tests (KernelMath)
+        run: ./gradlew :app:testDebugUnitTest
+
+      - name: Assemble release APK
+        run: ./gradlew :app:assembleRelease
+
+      - name: Rename APK for the release asset
+        run: cp app/build/outputs/apk/release/app-release.apk "compute-gym-${{ github.ref_name }}.apk"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" "compute-gym-${{ github.ref_name }}.apk" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes
